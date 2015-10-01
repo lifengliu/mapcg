@@ -1,4 +1,4 @@
-OPT=-O3 -G -g
+OPT=-O3 
 DEVICE_EMU=#-deviceemu
 CFLAGS=$(OPT) -fopenmp
 NVFLAGS=$(OPT) -arch=sm_20 $(DEVICE_EMU) #--ptxas-options=-v

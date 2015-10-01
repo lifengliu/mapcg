@@ -1,24 +1,3 @@
-/***************************************************************************
-
-    MapCG: MapReduce Framework for CPU & GPU
-
-    Copyright (C) 2010, Chuntao HONG (Chuntao.Hong@gmail.com).
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
-**************************************************************************/
-
 #include "HMMMain.h"
 #include "HMMDS.h"
 #include "UtilLib/HMMTSQueue.h"
@@ -30,8 +9,6 @@
 #include <iostream>
 #include <vector>
 #include <pthread.h>
-#include <stdio.h>
-#include <unistd.h>
 using namespace std;
 
 //=============================
@@ -51,6 +28,8 @@ public:
 	OutputChunk & get_output();
 };
 */
+
+const unsigned int SLICE_SIZE=100*1024*1024;
 
 void HMMMainScheduler::init(const HMMSchedulerSpec & a){
 	args=a;
@@ -76,14 +55,6 @@ void HMMMainScheduler::init(const HMMSchedulerSpec & a){
 	// see if there is enough GPU
 	int n=get_num_gpus();
 	args.num_gpus= args.num_gpus<=n ? args.num_gpus : n;
-
-	// reset output
-	delete[] output.keys;
-	output.keys=NULL;
-	delete[] output.vals;
-	output.vals=NULL;
-	delete[] output.index;
-	output.index=NULL;
 }
 
 enum SchedulerType{
@@ -135,7 +106,7 @@ init_timer();
 	// setup the input job_queue
 	JobQueue job_queue;
 	OutputQueue output_queue;
-	int num_steps=args.slice_num;
+	int num_steps=(args.input_size+SLICE_SIZE-1)/SLICE_SIZE;
 	int step=args.unit_size;
 	if(num_steps*args.unit_size >= args.input_size){
 		step=args.unit_size;
@@ -159,7 +130,6 @@ init_timer();
 
 printlog("init_time: %f\n",time_elapsed());	
 	// spawn CPUScheduler and GPUScheduler threads
-
 	Param para;
 	para.job_queue=&job_queue;
 	para.output_queue=&output_queue;
@@ -175,8 +145,11 @@ printlog("init_time: %f\n",time_elapsed());
 			gpu_params[i]=para;
 			gpu_params[i].type=SCHEDULER_GPU;
 			gpu_params[i].gpu_num=i;
+#if 0
 			pthread_create(&gpu_threads[i], NULL, scheduler_worker, &gpu_params[i]);
- //  		scheduler_worker(&gpu_params[i]);
+#else
+			scheduler_worker(&gpu_params[i]);
+#endif
 		}
 	}
 	if(args.exe_mode==CPU || args.exe_mode==CPU_GPU){
@@ -189,8 +162,10 @@ printlog("init_time: %f\n",time_elapsed());
 
 	// wait till work done
 	if(gpu_threads){
+#if 0
 		for(int i=0;i<args.num_gpus;i++)
 			pthread_join(gpu_threads[i],NULL);
+#endif
 	}
 	if(cpu_threads)
 		pthread_join(cpu_threads[0],NULL);
@@ -227,18 +202,10 @@ OutputChunk HMMMainScheduler::merge_output(OutputQueue & q){
 	}
 	if(outputs.size()==1)
 		return outputs[0];
-	if(args.merge_mode==CPU){
-		printf("merging with CPU...\n");
-		HMM_CPU::HMMSchedulerCPU merger;
-		merger.init_scheduler(args);
-		merger.do_merge(&outputs[0], outputs.size());
-		return merger.get_output();
-	}
-	else{
-		printf("merging with GPU...\n");
-		HMM_GPU::HMMSchedulerGPU merger;
-		merger.init_scheduler(args);
-		merger.do_merge(&outputs[0], outputs.size());
-		return merger.get_output();
-	}
+//	HMM_CPU::HMMSchedulerCPU merger;
+	HMM_GPU::HMMSchedulerGPU merger;
+	merger.init_scheduler(args);
+printlog("num_outputs: %d\n",outputs.size());
+	merger.do_merge(&outputs[0], outputs.size());
+	return merger.get_output();
 }

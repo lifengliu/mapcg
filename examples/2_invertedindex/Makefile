@@ -1,4 +1,4 @@
-OPT=-O3 -g -G
+OPT=-O3 
 DEVICE_EMU=#-deviceemu
 CFLAGS=$(OPT) -fopenmp
 NVFLAGS=$(OPT) -arch=compute_20 $(DEVICE_EMU)
